@@ -1,21 +1,30 @@
-# Enterprise chatbot bouwen met Bicep
+# Workshop: Bouw je eigen Enterprise Chatbot met Bicep (AZ-104)
 
-Ter voorbereiding van het AZ-104 examen bouwen we een chatbot waarbij je in een geisoleerde omgeving vragen kunt stellen aan je 'eigen' ChatGPT. Dit document beschrijft de technische vereisten om dit te bouwen met een veilige, schaalbare en robuuste Azure chatbot-infrastructuur met behulp van Bicep. Volg de onderstaande specificaties nauwkeurig om de modulaire Bicep-bestanden te genereren.
+Welkom bij deze hands-on workshop! In deze workshop ga je stap voor stap een enterprise-grade chatbotomgeving bouwen in Azure. Je leert werken met essentiële Azure services en past direct de kennis toe die je nodig hebt voor het **AZ-104 Azure Administrator** examen.
 
-Voor een goede leerervaring, is het aanbevolen om de modules 1 voor 1 uit te rollen en te snappen wat elk component in een module precies doet. Gebruik bijv. je eigen persoonlijke ChatGPT of vergelijkbaars die je zelf al hebt om te bevragen wat een service is en waarom je het zou gebruiken.
+## Waarom deze workshop?
+
+Tijdens het AZ-104 examen wordt je kennis getest over het beheren, beveiligen en automatiseren van Azure infrastructuur. In deze workshop oefen je deze vaardigheden door een complete, schaalbare en veilige chatbot-omgeving te bouwen met **Infrastructure as Code** (Bicep). Je werkt in een eigen, geïsoleerde omgeving en krijgt inzicht in het waarom en hoe van elke Azure service die je inzet.
+
+## Wat ga je doen?
+
+- Je start met een eenvoudige single-VM chatbot en transformeert deze naar een enterprise-architectuur.
+- Je leert hoe je Azure resources opzet, beveiligt, monitort en beheert volgens best practices.
+- Je werkt modulair: elke stap is een aparte module, zodat je precies ziet wat elk onderdeel doet.
+- Je krijgt uitleg, opdrachten en reflectievragen bij elke module, zodat je actief leert en de link met het AZ-104 examen duidelijk is.
 
 ## Architectuur doelstelling
 
-Het doel is om een bestaande single-VM chatbot-oplossing te transformeren naar een enterprise-architectuur. De belangrijkste verbeteringen zijn:
+Het doel is om een bestaande single-VM chatbot-oplossing te transformeren naar een enterprise-architectuur. De belangrijkste bouwstenen zijn:
 
   * **Hoge Beschikbaarheid en Schaalbaarheid** door een Virtual Machine Scale Set (VMSS) en Availability Zones.
   * **Veilige Externe Toegang** via een Application Gateway met een Web Application Firewall (WAF).
   * **Gecentraliseerde Monitoring en Logging** met Azure Monitor en een Log Analytics Workspace.
   * **Geautomatiseerd Beheer** door de infrastructuur volledig als code te definiëren in modulaire Bicep-bestanden.
 
-## Bicep modulaire structuur
+## Workshopstructuur
 
-De infrastructuur wordt opgesplitst in drie functionele modules en een hoofd-deploymentbestand.
+De infrastructuur is opgesplitst in drie functionele Bicep modules en een hoofd-deploymentbestand. Je rolt de modules één voor één uit, onderzoekt wat er gebeurt, en beantwoordt reflectievragen.
 
 ```
 .
