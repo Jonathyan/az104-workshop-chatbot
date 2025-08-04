@@ -1,247 +1,421 @@
 # Workshop: Bouw je eigen Enterprise Chatbot met Bicep (AZ-104)
 
-Welkom bij deze hands-on workshop! In deze workshop ga je stap voor stap een enterprise-grade chatbotomgeving bouwen in Azure. Je leert werken met essentiële Azure services en past direct de kennis toe die je nodig hebt voor het **AZ-104 Azure Administrator** examen.
+🎯 **Leerdoel**: Bouw een enterprise-grade chatbot infrastructuur met Azure en leer Bicep best practices
 
-## Waarom deze workshop?
+## 📚 Wat ga je leren?
 
-Tijdens het AZ-104 examen wordt je kennis getest over het beheren, beveiligen en automatiseren van Azure infrastructuur. In deze workshop oefen je deze vaardigheden door een complete, schaalbare en veilige chatbot-omgeving te bouwen met **Infrastructure as Code** (Bicep). Je werkt in een eigen, geïsoleerde omgeving en krijgt inzicht in het waarom en hoe van elke Azure service die je inzet.
+### AZ-104 Exam Skills:
+- **Virtual Networks & Subnets**: Netwerk segmentatie en security
+- **Load Balancing**: Internal LB + Application Gateway architectuur
+- **Virtual Machine Scale Sets**: Auto-scaling en high availability
+- **Azure Key Vault**: Secrets management met RBAC
+- **Private Endpoints**: Secure PaaS connectivity
+- **Azure Bastion**: Secure VM management
+- **Monitoring**: Log Analytics en autoscaling metrics
 
-## Wat ga je doen?
+### Bicep Best Practices:
+- **Parameterisatie**: Flexibele, herbruikbare templates
+- **Modulaire architectuur**: Foundation → Backend → Compute
+- **Naming conventions**: Consistente resource naamgeving
+- **Validation**: Input validatie met decorators
+- **Environment management**: Dev/Test/Prod configuraties
 
-- Je start met een eenvoudige single-VM chatbot en transformeert deze naar een enterprise-architectuur.
-- Je leert hoe je Azure resources opzet, beveiligt, monitort en beheert volgens best practices.
-- Je werkt modulair: elke stap is een aparte module, zodat je precies ziet wat elk onderdeel doet.
-- Je krijgt uitleg, opdrachten en reflectievragen bij elke module, zodat je actief leert en de link met het AZ-104 examen duidelijk is.
+## 🏗️ Architectuur Overzicht
 
-## Architectuur doelstelling
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Foundation    │    │     Backend      │    │     Compute     │
+│                 │    │                  │    │                 │
+│ • VNet/Subnets  │───▶│ • Key Vault      │───▶│ • VMSS          │
+│ • NSG Rules     │    │ • OpenAI Service │    │ • Load Balancer │
+│ • DNS Zones     │    │ • Private        │    │ • App Gateway   │
+│ • Bastion       │    │   Endpoints      │    │ • Autoscaling   │
+│ • Log Analytics │    │                  │    │                 │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+```
 
-Het doel is om een bestaande single-VM chatbot-oplossing te transformeren naar een enterprise-architectuur. De belangrijkste bouwstenen zijn:
+### 🔒 Security Features:
+- **Zero Trust**: Alle PaaS services via private endpoints
+- **WAF Protection**: OWASP 3.2 ruleset tegen web attacks
+- **RBAC**: Managed Identity voor Key Vault toegang
+- **Network Segmentation**: Dedicated subnets per functie
 
-  * **Hoge Beschikbaarheid en Schaalbaarheid** door een Virtual Machine Scale Set (VMSS) en Availability Zones.
-  * **Veilige Externe Toegang** via een Application Gateway met een Web Application Firewall (WAF).
-  * **Gecentraliseerde Monitoring en Logging** met Azure Monitor en een Log Analytics Workspace.
-  * **Geautomatiseerd Beheer** door de infrastructuur volledig als code te definiëren in modulaire Bicep-bestanden.
+### 📈 Scalability Features:
+- **Auto-scaling**: CPU-based scaling (2-5 instances)
+- **Availability Zones**: Multi-zone deployment
+- **Load Balancing**: Internal LB + Application Gateway
 
-## Workshopstructuur
-
-De infrastructuur is opgesplitst in drie functionele Bicep modules en een hoofd-deploymentbestand. Je rolt de modules één voor één uit, onderzoekt wat er gebeurt, en beantwoordt reflectievragen.
+## 📁 Project Structuur
 
 ```
 .
-├── main.bicep
-├── deploy.sh
-├── post-deploy.sh     # Automatiseert post-deployment stappen
+├── main.bicep              # 🎯 Orchestrator - roept modules aan
+├── main.bicepparam         # ⚙️  Environment parameters
+├── deploy.sh              # 🚀 Deployment script
+├── post-deploy.sh         # 🔧 Post-deployment configuratie
 └── modules/
-    ├── foundation.bicep   # Netwerk, logging, en backup
-    ├── backend.bicep      # PaaS-diensten (Key Vault, OpenAI)
-    └── compute.bicep      # Applicatiehosting (VMSS, App Gateway)
+    ├── foundation.bicep   # 🏗️  Netwerk & basis infrastructuur
+    ├── backend.bicep      # 🔐 PaaS services (Key Vault, OpenAI)
+    └── compute.bicep      # 💻 Applicatie hosting (VMSS, App Gateway)
 ```
 
------
+### 🎓 Leer Aanpak:
+1. **Bestudeer** elke module voordat je deployed
+2. **Begrijp** de parameters en hun impact
+3. **Experimenteer** met verschillende configuraties
+4. **Reflecteer** op de AZ-104 exam topics
+
+---
+
+# 📖 Module Deep Dive
+
+## 🎯 Leer Strategie
+Voor elke module:
+1. **Lees** de specificaties
+2. **Bekijk** de code in de module
+3. **Identificeer** de AZ-104 exam topics
+4. **Deploy** en **verifieer** het resultaat
 
 ## Specificaties per Bicep-bestand
 
-### 1\. `modules/foundation.bicep`
+### 1️⃣ `modules/foundation.bicep` - Netwerk Foundation
 
-**Doel:** Creëer de basisinfrastructuur voor netwerken, logging en back-up. Deze resources veranderen zelden.
+**🎯 AZ-104 Topics:** Virtual Networks, Subnets, NSGs, Private DNS, Azure Bastion
 
-**Parameters:**
+**Doel:** Creëer de basis netwerk infrastructuur die alle andere services gebruiken.
 
-  * `location`: `string` - De Azure-regio voor de resources.
-  * `vnetAddressPrefix`: `string` (default: `'10.0.0.0/16'`) - Het adresbereik voor het VNet.
+**🔧 Key Parameters:**
+- `resourcePrefix`: Naming convention (bijv. `dev-chatbot`)
+- `vnetAddressPrefix`: VNet CIDR (default: `10.0.0.0/16`)
+- `logRetentionDays`: Log Analytics retention (30-730 dagen)
 
-**Resources:**
+**💡 Bicep Features:**
+- `cidrSubnet()` functie voor automatische subnet berekening
+- `naming` object voor consistente resource namen
+- Decorators voor parameter validatie
 
-1.  **Log Analytics Workspace**: Voor het centraliseren van alle logs en metrics (gebruikt `Microsoft.OperationalInsights/workspaces@2021-06-01`).
-2.  **Network Security Group (NSG)** voor `snet-vmss`:
-      * **Inbound Regel 1**: Sta verkeer toe van de `AzureLoadBalancer` tag op poort `8080`.
-      * **Inbound Regel 2**: Sta SSH-verkeer (poort `22`) toe vanaf de `AzureBastionSubnet` (10.0.3.0/24).
-3.  **Virtual Network (VNet)**:
-      * Gebruik de `vnetAddressPrefix` parameter.
-      * NSG wordt gekoppeld aan het `snet-vmss` subnet.
-4.  **Subnetten** binnen het VNet:
-      * `snet-appgateway` (Adres: `10.0.0.0/24`)
-      * `snet-vmss` (Adres: `10.0.1.0/24`) - Met NSG gekoppeld
-      * `snet-endpoints` (Adres: `10.0.2.0/24`)
-      * `AzureBastionSubnet` (Adres: `10.0.3.0/24`) - Voor beheer.
-5.  **Private DNS Zones**:
-      * Zone 1: `privatelink.openai.azure.com`
-      * Zone 2: `privatelink.vaultcore.azure.net`
-      * **Virtual Network Links**: Koppel beide zones aan het VNet voor automatische DNS-registratie van de private endpoints.
-6.  **Public IP voor Bastion**: Standard SKU met statische allocatie.
-7.  **Azure Bastion**: Geconfigureerd voor het VNet en geplaatst in `AzureBastionSubnet`.
+**📦 Resources:**
 
-**Outputs:**
+| Resource | Purpose | AZ-104 Exam Topic |
+|----------|---------|-------------------|
+| **Log Analytics Workspace** | Centralized logging | Monitor and maintain Azure resources |
+| **Network Security Group** | Subnet-level firewall | Configure and manage virtual networks |
+| **Virtual Network** | Network isolation | Configure and manage virtual networks |
+| **4 Subnets** | Network segmentation | Configure and manage virtual networks |
+| **Private DNS Zones** | Private endpoint resolution | Configure and manage virtual networks |
+| **Azure Bastion** | Secure VM access | Manage identities and governance |
 
-  * `vnetId`: De resource ID van het VNet.
-  * `vnetName`: De naam van het VNet.
-  * `appGatewaySubnetId`: De resource ID van `snet-appgateway`.
-  * `vmssSubnetId`: De resource ID van `snet-vmss`.
-  * `endpointsSubnetId`: De resource ID van `snet-endpoints`.
-  * `logAnalyticsWorkspaceId`: De resource ID van de Log Analytics Workspace.
+**🔍 Subnet Layout:**
+```
+10.0.0.0/16 (VNet)
+├── 10.0.0.0/24 (snet-appgateway)    # Application Gateway
+├── 10.0.1.0/24 (snet-vmss)         # Virtual Machine Scale Set
+├── 10.0.2.0/24 (snet-endpoints)    # Private Endpoints
+└── 10.0.3.0/24 (AzureBastionSubnet) # Azure Bastion
+```
 
-### 2\. `modules/backend.bicep`
+**🛡️ Security Rules:**
+- Allow Azure Load Balancer → Port 8080 (Health probes)
+- Allow Bastion Subnet → Port 22 (SSH management)
 
-**Doel:** Creëer de beveiligde PaaS-backenddiensten.
+**📤 Outputs:**
+- `vnetId`, `vnetName`: Voor module dependencies
+- `*SubnetId`: Subnet references voor andere modules
+- `logAnalyticsWorkspaceId`: Voor monitoring configuratie
 
-**Parameters:**
+### 2️⃣ `modules/backend.bicep` - Secure PaaS Services
 
-  * `location`: `string`
-  * `vnetName`: `string`
-  * `endpointsSubnetId`: `string`
-  * `principalIdForKVAccess`: `string` - De Object ID van de gebruiker/principal die Key Vault geheimen mag beheren.
+**🎯 AZ-104 Topics:** Key Vault, Cognitive Services, Private Endpoints, RBAC
 
-**Resources:**
+**Doel:** Deploy beveiligde PaaS services zonder public internet toegang.
 
-1.  **Azure Key Vault**:
-      * Schakel `publicNetworkAccess` uit.
-      * Schakel `enableRbacAuthorization` in.
-      * Geen access policies - gebruikt RBAC voor toegangsbeheer.
-2.  **Private Endpoint voor Key Vault**:
-      * Plaats in het `endpointsSubnetId`.
-      * **Private DNS Zone Group**: Automatische koppeling aan de `privatelink.vaultcore.azure.net` DNS-zone.
-3.  **Azure OpenAI Service**:
-      * SKU: S0
-      * Schakel `publicNetworkAccess` uit.
-4.  **Private Endpoint voor OpenAI**:
-      * Plaats in het `endpointsSubnetId`.
-      * **Private DNS Zone Group**: Automatische koppeling aan de `privatelink.openai.azure.com` DNS-zone.
-      * Gebruikt `account` als groupId voor de private link service connection.
+**🔧 Key Parameters:**
+- `resourcePrefix`: Voor consistente naming
+- `principalIdForKVAccess`: User Object ID voor Key Vault RBAC
+- `endpointsSubnetId`: Subnet voor private endpoints
 
-**Outputs:**
+**🔐 Security Design:**
+- **Zero Public Access**: Alle services via private endpoints
+- **RBAC Authorization**: Geen legacy access policies
+- **DNS Integration**: Automatische private DNS registratie
 
-  * `keyVaultName`: De naam van de Key Vault.
-  * `azureOpenAIName`: De naam van de Azure OpenAI-service.
+**📦 Resources:**
 
-### 3\. `modules/compute.bicep`
+| Resource | Configuration | AZ-104 Exam Topic |
+|----------|---------------|-------------------|
+| **Key Vault** | RBAC-only, no public access | Manage identities and governance |
+| **OpenAI Service** | S0 SKU, private only | Deploy and manage Azure compute resources |
+| **Private Endpoints** | DNS zone integration | Configure and manage virtual networks |
 
-**Doel:** Creëer de rekenkracht en toegangspoort voor de applicatie.
+**🔗 Private Connectivity:**
+```
+VMSS → Private Endpoint → Key Vault
+                       → OpenAI Service
+```
 
-**Parameters:**
+**💡 Learning Points:**
+- **Private Endpoints**: Hoe PaaS services veilig te verbinden
+- **DNS Zone Groups**: Automatische DNS registratie
+- **RBAC vs Access Policies**: Modern authorization model
 
-  * `location`: `string`
-  * `vmssSubnetId`: `string`
-  * `appGatewaySubnetId`: `string`
-  * `keyVaultName`: `string`
-  * `azureOpenAIName`: `string`
-  * `adminUsername`: `string` - Gebruikersnaam voor de VM's.
-  * `adminSshPublicKey`: `string` - De publieke SSH-sleutel voor de beheerder.
+**📤 Outputs:**
+- `keyVaultName`: Voor RBAC configuratie in compute module
+- `azureOpenAIName`: Voor post-deployment script
 
-**Resources:**
+### 3️⃣ `modules/compute.bicep` - Application Platform
 
-1.  **Public IP Address** (Standard SKU, Regional tier) voor de Application Gateway met statische allocatie.
-2.  **Internal Load Balancer** (Standard SKU, Regional tier):
-      * **Frontend IP Configuration**: Dynamisch privaat IP-adres in `snet-vmss`.
-      * **Backend Address Pool**: Wordt automatisch gevuld door de VMSS.
-      * **Health Probe**: TCP-probe op poort `8080` (15s interval, 2 probes).
-      * **Load Balancing Rule**: Verdeel verkeer van de frontend naar de backend pool op poort `8080`.
-3.  **Virtual Machine Scale Set (VMSS)**:
-      * **SKU**: `Standard_B2s`
-      * **Image**: Ubuntu Server 22.04 LTS (`0001-com-ubuntu-server-jammy`, `22_04-lts-gen2`).
-      * **Instance Count**: Start met 2 instances.
-      * **Availability Zones**: Spreid de instances over zones 1, 2 en 3.
-      * **Networking**: Koppel aan `vmssSubnetId` en de backend pool van de Internal Load Balancer.
-      * **Identity**: Schakel een **System-Assigned Managed Identity** in.
-      * **Authentication**: SSH-only (geen wachtwoord), gebruikt de `adminSshPublicKey` parameter.
-      * **VM Extension (`CustomScript`)**: Inline script dat Python, Streamlit en de chatbot-app installeert en configureert als systemd service.
-4.  **Autoscaling Settings** (aparte resource):
-      * Schaal uit naar max. 5 instances als CPU > 75% voor 5 minuten.
-      * Schaal in naar min. 2 instances als CPU < 25% voor 10 minuten.
-5.  **RBAC Role Assignment**: Wijs de **Key Vault Secrets User** rol toe aan de **Managed Identity** van de VMSS.
-6.  **Application Gateway** (WAF_v2 SKU):
-      * **WAF**: Ingeschakeld met OWASP 3.2 ruleset in 'Prevention' mode.
-      * **Frontend IP**: Koppel de Public IP.
-      * **HTTP Listener**: Luister op poort 80.
-      * **Backend Pool**: Verwijst naar het private IP-adres van de Internal Load Balancer.
-      * **Backend HTTP Settings**: Poort 8080, HTTP protocol, 20s timeout.
-      * **Routing Rule**: Koppel de listener aan de backend pool.
+**🎯 AZ-104 Topics:** VMSS, Load Balancers, Application Gateway, Auto-scaling, Managed Identity
 
-**Outputs:**
+**Doel:** Deploy schaalbare, highly available applicatie infrastructuur.
 
-  * `appGatewayPublicIpAddress`: Het publieke IP-adres van de Application Gateway.
+**🔧 Key Parameters:**
+- `vmSku`: VM size (default: `Standard_B2s`)
+- `minInstances`/`maxInstances`: Auto-scaling grenzen
+- `scaleOutThreshold`/`scaleInThreshold`: CPU thresholds
+- `adminSshPublicKey`: SSH public key voor VM toegang
 
-### 4\. `main.bicep`
+**📈 Scaling Strategy:**
+- **Scale Out**: CPU > 75% voor 5 minuten → +1 instance
+- **Scale In**: CPU < 25% voor 10 minuten → -1 instance
+- **Zones**: Spread over 3 availability zones
 
-**Doel:** Orkestreer de deployment van alle modules in de juiste volgorde.
+**📦 Resources:**
 
-**Parameters:**
+| Resource | Purpose | AZ-104 Exam Topic |
+|----------|---------|-------------------|
+| **VMSS** | Scalable compute platform | Deploy and manage Azure compute resources |
+| **Internal Load Balancer** | Backend load distribution | Configure and manage virtual networks |
+| **Application Gateway** | WAF + external load balancing | Configure and manage virtual networks |
+| **Autoscale Settings** | CPU-based scaling | Monitor and maintain Azure resources |
+| **Managed Identity** | Secure service authentication | Manage identities and governance |
 
-  * `adminUsername`: `string` - Gebruikersnaam voor de VM's in de VMSS.
-  * `adminSshPublicKey`: `string` - De publieke SSH-sleutel voor authenticatie.
-  * `principalIdForKVAccess`: `string` - Object ID van de gebruiker voor Key Vault toegang (geen default waarde).
+**🏗️ Architecture Flow:**
+```
+Internet → App Gateway (WAF) → Internal LB → VMSS Instances
+                                              ↓
+                                         Managed Identity
+                                              ↓
+                                          Key Vault
+```
 
-**Logica:**
+**💡 Advanced Features:**
+- **cidrHost()**: Berekent statisch IP voor load balancer
+- **Custom Script Extension**: Installeert Streamlit app
+- **Managed Identity**: Passwordless Key Vault toegang
 
-1.  **Definieer een `location` variabele**: `resourceGroup().location`.
-2.  **Roep de `foundation` module aan**: Geef de `location` mee.
-3.  **Roep de `backend` module aan**:
-      * Gebruik outputs van de `foundation` module (bv. `endpointsSubnetId`, `vnetName`).
-      * Geef de `principalIdForKVAccess` parameter door.
-4.  **Roep de `compute` module aan**:
-      * `dependsOn`: `[ foundation, backend ]` om de juiste volgorde af te dwingen.
-      * Gebruik outputs van zowel `foundation` (subnet ID's) als `backend` (Key Vault- en OpenAI-namen).
-      * Geef de admin-credentials door.
+**📤 Outputs:**
+- `appGatewayPublicIpAddress`: Chatbot toegangs-URL
 
-**Outputs:**
+### 4️⃣ `main.bicep` - Orchestrator
 
-  * `chatbotAccessUrl`: Construeer een URL, bijvoorbeeld `'http://${compute.outputs.appGatewayPublicIpAddress}'`.
+**🎯 AZ-104 Topics:** Resource Dependencies, Parameter Management, Module Orchestration
 
-### 5\. `deploy.sh`
+**Doel:** Coördineer de deployment van alle modules met juiste dependencies.
 
-**Doel:** Vereenvoudig het deployment proces met error handling.
+**🔧 Parameters met Validation:**
+```bicep
+@allowed(['dev', 'test', 'prod'])
+param environment string = 'dev'
 
-**Script logica:**
+@minValue(1) @maxValue(10)
+param minInstances int = 2
+```
 
-1.  **Error handling**: Script stopt bij fouten (`set -e`).
-2.  Vraag om een `RESOURCE_GROUP` naam.
-3.  Vraag om een `ADMIN_USERNAME` (default: `azureuser`).
-4.  **SSH Key validatie**: Controleer of `~/.ssh/id_rsa.pub` bestaat, anders toon instructies.
-5.  **User Principal ID**: Haal de object-ID van de ingelogde gebruiker op met error handling.
-6.  **Deployment**: Voer het `az deployment group create` commando uit met alle parameters.
+**📋 Deployment Flow:**
+1. **Foundation** → Netwerk basis
+2. **Backend** → PaaS services (depends on Foundation)
+3. **Compute** → Applicatie platform (depends on Foundation + Backend)
 
-### 6\. `post-deploy.sh`
+**🔄 Module Dependencies:**
+```bicep
+Foundation (VNet) → Backend (Private Endpoints) → Compute (VMSS)
+```
 
-**Doel:** Automatiseer de post-deployment configuratie.
+**📤 Final Output:**
+- `chatbotAccessUrl`: Complete HTTP URL naar de chatbot
 
-**Script logica:**
+### 5️⃣ `main.bicepparam` - Parameter File
 
-1.  Vraag om de `RESOURCE_GROUP` naam.
-2.  **Resource Discovery**: Vind automatisch de Key Vault en OpenAI service namen.
-3.  **OpenAI API Key**: Haal de API-sleutel op en voeg toe aan Key Vault als `OpenAI-API-Key`.
-4.  **Model Deployment**: Implementeer automatisch het GPT-4 model in de OpenAI service.
-5.  **URL Output**: Toon de chatbot toegangs-URL.
+**🎯 Bicep Best Practice:** Environment-specific configuration
 
------
+**Voordelen:**
+- Type-safe parameter definitie
+- IntelliSense support
+- Gekoppeld aan template schema
 
-## Deployment Instructies
+### 6️⃣ Deployment Scripts
 
-### Stap 1: Voorbereiding
+**`deploy.sh`** - Interactive deployment:
+- Resource group creation/selection
+- Environment configuration (dev/test/prod)
+- SSH key validation
+- Parameter file + runtime overrides
 
-1. **Azure CLI**: Zorg dat je bent ingelogd: `az login`
-2. **SSH Key**: Genereer een SSH key pair als je die nog niet hebt: `ssh-keygen -t rsa -b 4096`
-3. **Resource Group**: Maak een resource group aan: `az group create --name <naam> --location westeurope`
+**`post-deploy.sh`** - Automated configuration:
+- OpenAI API key management
+- GPT-4 model deployment
+- Service discovery and URL output
 
-### Stap 2: Deployment
+---
 
-1. **Hoofddeployment**: Voer `./deploy.sh` uit en volg de prompts
-2. **Post-configuratie**: Voer `./post-deploy.sh` uit om de OpenAI configuratie te voltooien
+# 🚀 Hands-on Workshop
 
-### Stap 3: Verificatie
+## Stap 1: Voorbereiding (5 min)
 
-Na succesvolle deployment krijg je een URL waar de chatbot beschikbaar is. Het kan enkele minuten duren voordat de applicatie volledig operationeel is.
+### ✅ Prerequisites Checklist:
+```bash
+# 1. Azure CLI login
+az login
+az account show  # Verify correct subscription
 
-## Chatbot Applicatie Details
+# 2. SSH Key generatie
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa
+# Press Enter for all prompts (no passphrase)
 
-De geïmplementeerde chatbot is een **Streamlit-applicatie** die:
+# 3. Verify SSH key
+ls -la ~/.ssh/id_rsa.pub
+```
 
-- **Azure Key Vault** gebruikt voor veilige opslag van de OpenAI API-sleutel
-- **Managed Identity** gebruikt voor authenticatie met Azure services
-- **OpenAI GPT-4** model gebruikt voor chat-functionaliteit
-- Draait als **systemd service** op poort 8080
-- **Session state** behoudt voor gesprekgeschiedenis
+## Stap 2: Code Exploratie (10 min)
 
-## Troubleshooting
+### 🔍 Bestudeer de Templates:
+1. **Open `main.bicep`** - Bekijk de parameters en decorators
+2. **Open `main.bicepparam`** - Zie de default configuratie
+3. **Open `modules/foundation.bicep`** - Zoek de `cidrSubnet()` functie
+4. **Open `modules/compute.bicep`** - Vind de autoscaling configuratie
 
-- **Applicatie niet beschikbaar**: Controleer of de VMSS instances draaien en de custom script extension is voltooid
-- **Authentication errors**: Zorg dat de Managed Identity de juiste RBAC-rechten heeft op de Key Vault
-- **OpenAI errors**: Controleer of het GPT-4 model is geïmplementeerd en de API-sleutel correct is opgeslagen
+### 💡 Reflectie Vragen:
+- Welke AZ-104 exam topics zie je in elke module?
+- Hoe zorgt de `naming` variable voor consistentie?
+- Waarom gebruiken we private endpoints?
+
+## Stap 3: Deployment (15 min)
+
+### 🚀 Deploy de Infrastructure:
+```bash
+# Maak executable
+chmod +x deploy.sh post-deploy.sh
+
+# Start deployment
+./deploy.sh
+```
+
+**Deployment Keuzes:**
+- **Resource Group**: Nieuw aanmaken of bestaande gebruiken
+- **Environment**: `dev` (aanbevolen voor workshop)
+- **VM SKU**: `Standard_B2s` (cost-effective)
+- **Admin Username**: `azureuser` (default)
+
+### ⏱️ Deployment Timeline:
+- **Foundation Module**: ~3 minuten (VNet, Bastion)
+- **Backend Module**: ~5 minuten (Key Vault, OpenAI)
+- **Compute Module**: ~7 minuten (VMSS, App Gateway)
+
+## Stap 4: Post-Configuration (5 min)
+
+### 🔧 Configureer OpenAI:
+```bash
+./post-deploy.sh
+```
+
+**Wat gebeurt er:**
+1. OpenAI API key → Key Vault secret
+2. GPT-4 model deployment
+3. Chatbot URL output
+
+## Stap 5: Verificatie & Testing (10 min)
+
+### ✅ Controleer de Deployment:
+
+1. **Azure Portal Verificatie:**
+   - Resource Group → Bekijk alle resources
+   - VMSS → Controleer instance count en zones
+   - Application Gateway → Bekijk backend health
+   - Key Vault → Controleer RBAC assignments
+
+2. **Chatbot Testing:**
+   ```
+   Open: http://<APP_GATEWAY_IP>
+   Test: "Hello, how are you?"
+   ```
+
+3. **Scaling Testing:**
+   ```bash
+   # Genereer CPU load op VMSS
+   # Bekijk scaling in Azure Portal
+   ```
+
+---
+
+# 🎓 Learning Outcomes
+
+## AZ-104 Exam Mapping
+
+| Workshop Component | AZ-104 Skill |
+|-------------------|---------------|
+| VNet + Subnets | Configure and manage virtual networks (25-30%) |
+| NSG Rules | Configure and manage virtual networks (25-30%) |
+| VMSS + Auto-scaling | Deploy and manage Azure compute resources (25-30%) |
+| Load Balancers | Configure and manage virtual networks (25-30%) |
+| Key Vault + RBAC | Manage identities and governance (15-20%) |
+| Private Endpoints | Configure and manage virtual networks (25-30%) |
+| Monitoring + Alerts | Monitor and maintain Azure resources (10-15%) |
+
+## Bicep Best Practices Geleerd
+
+✅ **Parameterisatie**: Flexibele, herbruikbare templates  
+✅ **Modulaire Architectuur**: Separation of concerns  
+✅ **Naming Conventions**: Consistente resource naamgeving  
+✅ **Input Validation**: Decorators voor parameter validatie  
+✅ **Calculated Values**: `cidrSubnet()` en `cidrHost()` functies  
+
+---
+
+# 🔧 Troubleshooting Guide
+
+## Deployment Issues
+
+**❌ SSH Key Not Found:**
+```bash
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa
+```
+
+**❌ Resource Group Doesn't Exist:**
+- Deploy script offers to create new RG
+- Or manually: `az group create --name myRG --location westeurope`
+
+**❌ Insufficient Permissions:**
+```bash
+az role assignment create --assignee $(az ad signed-in-user show --query id -o tsv) \
+  --role "Contributor" --scope "/subscriptions/$(az account show --query id -o tsv)"
+```
+
+## Application Issues
+
+**❌ Chatbot Not Responding:**
+1. Check VMSS instances: `az vmss list-instances`
+2. Check custom script extension logs
+3. Verify GPT-4 model deployment
+
+**❌ Authentication Errors:**
+1. Verify Managed Identity has Key Vault Secrets User role
+2. Check Key Vault RBAC assignments
+3. Verify OpenAI API key in Key Vault
+
+---
+
+# 🎯 Next Steps
+
+## Experiment Further:
+1. **Scale Testing**: Genereer CPU load en bekijk auto-scaling
+2. **Security Testing**: Test WAF rules met malicious requests
+3. **Monitoring**: Setup alerts voor scaling events
+4. **Multi-Environment**: Deploy naar test/prod met andere parameters
+
+## Advanced Scenarios:
+- **Blue/Green Deployment**: Gebruik deployment slots
+- **Disaster Recovery**: Multi-region deployment
+- **Cost Optimization**: Reserved instances, spot VMs
+- **DevOps Integration**: Azure DevOps pipelines
+
+**🏆 Gefeliciteerd! Je hebt een enterprise-grade chatbot infrastructuur gebouwd met Bicep best practices!**

@@ -1,11 +1,28 @@
+@description('Azure region for resources')
 param location string
+
+@description('Resource prefix for naming')
+param resourcePrefix string
+
+@description('VNet name for DNS zone references')
 param vnetName string
+
+@description('Endpoints subnet ID')
 param endpointsSubnetId string
+
+@description('Principal ID for Key Vault access')
 param principalIdForKVAccess string
+
+var naming = {
+  keyVault: '${resourcePrefix}-kv-${uniqueString(resourceGroup().id)}'
+  openAI: '${resourcePrefix}-openai-${uniqueString(resourceGroup().id)}'
+  kvPrivateEndpoint: '${resourcePrefix}-kv-pe'
+  openAIPrivateEndpoint: '${resourcePrefix}-openai-pe'
+}
 
 // Azure Key Vault
 resource keyVault 'Microsoft.KeyVault/vaults@2021-04-01' = {
-  name: '${uniqueString(resourceGroup().id)}-kv'
+  name: naming.keyVault
   location: location
   properties: {
     sku: {
@@ -20,7 +37,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2021-04-01' = {
 
 // Private Endpoint for Key Vault
 resource keyVaultPrivateEndpoint 'Microsoft.Network/privateEndpoints@2021-02-01' = {
-  name: '${keyVault.name}-pe'
+  name: naming.kvPrivateEndpoint
   location: location
   properties: {
     subnet: {
@@ -57,7 +74,7 @@ resource keyVaultDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZone
 
 // Azure OpenAI Service
 resource openAIService 'Microsoft.CognitiveServices/accounts@2021-04-30' = {
-  name: '${uniqueString(resourceGroup().id)}-openai'
+  name: naming.openAI
   location: location
   kind: 'OpenAI'
   sku: {
@@ -71,7 +88,7 @@ resource openAIService 'Microsoft.CognitiveServices/accounts@2021-04-30' = {
 
 // Private Endpoint for OpenAI
 resource openAIPrivateEndpoint 'Microsoft.Network/privateEndpoints@2021-02-01' = {
-  name: '${openAIService.name}-pe'
+  name: naming.openAIPrivateEndpoint
   location: location
   properties: {
     subnet: {

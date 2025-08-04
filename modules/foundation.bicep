@@ -1,21 +1,57 @@
+@description('Azure region for resources')
 param location string
+
+@description('Resource prefix for naming')
+param resourcePrefix string
+
+@description('VNet address prefix')
 param vnetAddressPrefix string = '10.0.0.0/16'
 
-var vnetName = 'foundation-vnet'
+@description('Log Analytics retention in days')
+@minValue(30)
+@maxValue(730)
+param logRetentionDays int = 30
+
+var naming = {
+  vnet: '${resourcePrefix}-vnet'
+  nsg: '${resourcePrefix}-nsg'
+  law: '${resourcePrefix}-law'
+  bastion: '${resourcePrefix}-bastion'
+  bastionPip: '${resourcePrefix}-bastion-pip'
+}
+
+var subnetConfig = {
+  appgateway: {
+    name: 'snet-appgateway'
+    addressPrefix: cidrSubnet(vnetAddressPrefix, 24, 0)
+  }
+  vmss: {
+    name: 'snet-vmss'
+    addressPrefix: cidrSubnet(vnetAddressPrefix, 24, 1)
+  }
+  endpoints: {
+    name: 'snet-endpoints'
+    addressPrefix: cidrSubnet(vnetAddressPrefix, 24, 2)
+  }
+  bastion: {
+    name: 'AzureBastionSubnet'
+    addressPrefix: cidrSubnet(vnetAddressPrefix, 24, 3)
+  }
+}
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2021-06-01' = {
-  name: '${vnetName}-law'
+  name: naming.law
   location: location
   properties: {
     sku: {
       name: 'PerGB2018'
     }
-    retentionInDays: 30
+    retentionInDays: logRetentionDays
   }
 }
 
 resource nsg 'Microsoft.Network/networkSecurityGroups@2021-02-01' = {
-  name: '${vnetName}-nsg'
+  name: naming.nsg
   location: location
   properties: {
     securityRules: [
@@ -39,7 +75,7 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2021-02-01' = {
           direction: 'Inbound'
           access: 'Allow'
           protocol: 'Tcp'
-          sourceAddressPrefix: '10.0.3.0/24'
+          sourceAddressPrefix: subnetConfig.bastion.addressPrefix
           sourcePortRange: '*'
           destinationAddressPrefix: '*'
           destinationPortRange: '22'
@@ -50,7 +86,7 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2021-02-01' = {
 }
 
 resource vnet 'Microsoft.Network/virtualNetworks@2021-02-01' = {
-  name: vnetName
+  name: naming.vnet
   location: location
   properties: {
     addressSpace: {
@@ -60,30 +96,30 @@ resource vnet 'Microsoft.Network/virtualNetworks@2021-02-01' = {
     }
     subnets: [
       {
-        name: 'snet-appgateway'
+        name: subnetConfig.appgateway.name
         properties: {
-          addressPrefix: '10.0.0.0/24'
+          addressPrefix: subnetConfig.appgateway.addressPrefix
         }
       }
       {
-        name: 'snet-vmss'
+        name: subnetConfig.vmss.name
         properties: {
-          addressPrefix: '10.0.1.0/24'
+          addressPrefix: subnetConfig.vmss.addressPrefix
           networkSecurityGroup: {
             id: nsg.id
           }
         }
       }
       {
-        name: 'snet-endpoints'
+        name: subnetConfig.endpoints.name
         properties: {
-          addressPrefix: '10.0.2.0/24'
+          addressPrefix: subnetConfig.endpoints.addressPrefix
         }
       }
       {
-        name: 'AzureBastionSubnet'
+        name: subnetConfig.bastion.name
         properties: {
-          addressPrefix: '10.0.3.0/24'
+          addressPrefix: subnetConfig.bastion.addressPrefix
         }
       }
     ]
@@ -102,7 +138,7 @@ resource privateDnsZone2 'Microsoft.Network/privateDnsZones@2020-06-01' = {
 
 resource dnsZoneLink1 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
   parent: privateDnsZone1
-  name: '${vnetName}-link'
+  name: '${naming.vnet}-link'
   location: 'global'
   properties: {
     registrationEnabled: false
@@ -114,7 +150,7 @@ resource dnsZoneLink1 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@202
 
 resource dnsZoneLink2 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
   parent: privateDnsZone2
-  name: '${vnetName}-link'
+  name: '${naming.vnet}-link'
   location: 'global'
   properties: {
     registrationEnabled: false
@@ -125,7 +161,7 @@ resource dnsZoneLink2 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@202
 }
 
 resource bastionPublicIp 'Microsoft.Network/publicIPAddresses@2021-02-01' = {
-  name: '${vnetName}-bastion-pip'
+  name: naming.bastionPip
   location: location
   sku: {
     name: 'Standard'
@@ -136,7 +172,7 @@ resource bastionPublicIp 'Microsoft.Network/publicIPAddresses@2021-02-01' = {
 }
 
 resource azureBastion 'Microsoft.Network/bastionHosts@2021-02-01' = {
-  name: '${vnetName}-bastion'
+  name: naming.bastion
   location: location
   properties: {
     ipConfigurations: [
@@ -144,7 +180,7 @@ resource azureBastion 'Microsoft.Network/bastionHosts@2021-02-01' = {
         name: 'bastionIpConfig'
         properties: {
           subnet: {
-            id: '${vnet.id}/subnets/AzureBastionSubnet'
+            id: '${vnet.id}/subnets/${subnetConfig.bastion.name}'
           }
           publicIPAddress: {
             id: bastionPublicIp.id
@@ -157,7 +193,7 @@ resource azureBastion 'Microsoft.Network/bastionHosts@2021-02-01' = {
 
 output vnetId string = vnet.id
 output vnetName string = vnet.name
-output appGatewaySubnetId string = '${vnet.id}/subnets/snet-appgateway'
-output vmssSubnetId string = '${vnet.id}/subnets/snet-vmss'
-output endpointsSubnetId string = '${vnet.id}/subnets/snet-endpoints'
+output appGatewaySubnetId string = '${vnet.id}/subnets/${subnetConfig.appgateway.name}'
+output vmssSubnetId string = '${vnet.id}/subnets/${subnetConfig.vmss.name}'
+output endpointsSubnetId string = '${vnet.id}/subnets/${subnetConfig.endpoints.name}'
 output logAnalyticsWorkspaceId string = logAnalytics.id

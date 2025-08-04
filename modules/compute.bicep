@@ -1,14 +1,67 @@
+@description('Azure region for resources')
 param location string
+
+@description('Resource prefix for naming')
+param resourcePrefix string
+
+@description('VMSS subnet ID')
 param vmssSubnetId string
+
+@description('Application Gateway subnet ID')
 param appGatewaySubnetId string
+
+@description('VNet address prefix for IP calculations')
+param vnetAddressPrefix string
+
+@description('Key Vault name')
 param keyVaultName string
+
+@description('Azure OpenAI service name')
 param azureOpenAIName string
+
+@description('Admin username for VMs')
 param adminUsername string
+
+@description('SSH public key for VM authentication')
 param adminSshPublicKey string
+
+@description('VM SKU for VMSS instances')
+param vmSku string = 'Standard_B2s'
+
+@description('Minimum number of VMSS instances')
+@minValue(1)
+@maxValue(10)
+param minInstances int = 2
+
+@description('Maximum number of VMSS instances')
+@minValue(1)
+@maxValue(100)
+param maxInstances int = 5
+
+@description('CPU threshold for scale out')
+@minValue(1)
+@maxValue(100)
+param scaleOutThreshold int = 75
+
+@description('CPU threshold for scale in')
+@minValue(1)
+@maxValue(100)
+param scaleInThreshold int = 25
+
+var naming = {
+  appGatewayPip: '${resourcePrefix}-appgw-pip'
+  loadBalancer: '${resourcePrefix}-lb'
+  vmss: '${resourcePrefix}-vmss'
+  appGateway: '${resourcePrefix}-appgw'
+  autoscale: '${resourcePrefix}-autoscale'
+}
+
+var vmssSubnetPrefix = cidrSubnet(vnetAddressPrefix, 24, 1)
+var loadBalancerStaticIP = cidrHost(vmssSubnetPrefix, 4)
 
 // Public IP Address for the Application Gateway
 resource appGatewayPublicIp 'Microsoft.Network/publicIPAddresses@2021-02-01' = {
-  name: 'appgateway-pip'
+  name: naming.appGatewayPip
   location: location
   sku: {
     name: 'Standard'
@@ -21,7 +74,7 @@ resource appGatewayPublicIp 'Microsoft.Network/publicIPAddresses@2021-02-01' = {
 
 // Internal Load Balancer
 resource internalLoadBalancer 'Microsoft.Network/loadBalancers@2021-02-01' = {
-  name: 'internal-lb'
+  name: naming.loadBalancer
   location: location
   sku: {
     name: 'Standard'
@@ -33,7 +86,7 @@ resource internalLoadBalancer 'Microsoft.Network/loadBalancers@2021-02-01' = {
         name: 'frontend'
         properties: {
           privateIPAllocationMethod: 'Static'
-          privateIPAddress: '10.0.1.4'
+          privateIPAddress: loadBalancerStaticIP
           subnet: {
             id: vmssSubnetId
           }
@@ -61,13 +114,13 @@ resource internalLoadBalancer 'Microsoft.Network/loadBalancers@2021-02-01' = {
         name: 'lb-rule'
         properties: {
           frontendIPConfiguration: {
-            id: resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', 'internal-lb', 'frontend')
+            id: resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', naming.loadBalancer, 'frontend')
           }
           backendAddressPool: {
-            id: resourceId('Microsoft.Network/loadBalancers/backendAddressPools', 'internal-lb', 'backend')
+            id: resourceId('Microsoft.Network/loadBalancers/backendAddressPools', naming.loadBalancer, 'backend')
           }
           probe: {
-            id: resourceId('Microsoft.Network/loadBalancers/probes', 'internal-lb', 'health-probe')
+            id: resourceId('Microsoft.Network/loadBalancers/probes', naming.loadBalancer, 'health-probe')
           }
           protocol: 'Tcp'
           frontendPort: 8080
@@ -82,13 +135,13 @@ resource internalLoadBalancer 'Microsoft.Network/loadBalancers@2021-02-01' = {
 
 // Virtual Machine Scale Set
 resource vmss 'Microsoft.Compute/virtualMachineScaleSets@2021-03-01' = {
-  name: 'chatbot-vmss'
+  name: naming.vmss
   location: location
   zones: ['1', '2', '3']
   sku: {
-    name: 'Standard_B2s'
+    name: vmSku
     tier: 'Standard'
-    capacity: 2
+    capacity: minInstances
   }
   identity: {
     type: 'SystemAssigned'
@@ -251,16 +304,16 @@ systemctl start chatbot.service
 
 // Autoscaling settings
 resource autoscaleSettings 'Microsoft.Insights/autoscalesettings@2021-05-01-preview' = {
-  name: 'chatbot-autoscale'
+  name: naming.autoscale
   location: location
   properties: {
     profiles: [
       {
         name: 'default'
         capacity: {
-          minimum: '2'
-          maximum: '5'
-          default: '2'
+          minimum: string(minInstances)
+          maximum: string(maxInstances)
+          default: string(minInstances)
         }
         rules: [
           {
@@ -273,7 +326,7 @@ resource autoscaleSettings 'Microsoft.Insights/autoscalesettings@2021-05-01-prev
               timeWindow: 'PT5M'
               timeAggregation: 'Average'
               operator: 'GreaterThan'
-              threshold: 75
+              threshold: scaleOutThreshold
             }
             scaleAction: {
               direction: 'Increase'
@@ -292,7 +345,7 @@ resource autoscaleSettings 'Microsoft.Insights/autoscalesettings@2021-05-01-prev
               timeWindow: 'PT10M'
               timeAggregation: 'Average'
               operator: 'LessThan'
-              threshold: 25
+              threshold: scaleInThreshold
             }
             scaleAction: {
               direction: 'Decrease'
@@ -322,7 +375,7 @@ resource keyVaultSecretsUser 'Microsoft.Authorization/roleAssignments@2020-04-01
 
 // Application Gateway
 resource appGateway 'Microsoft.Network/applicationGateways@2021-02-01' = {
-  name: 'chatbot-appgw'
+  name: naming.appGateway
   location: location
   properties: {
     sku: {
@@ -370,7 +423,7 @@ resource appGateway 'Microsoft.Network/applicationGateways@2021-02-01' = {
         properties: {
           backendAddresses: [
             {
-              ipAddress: '10.0.1.4'
+              ipAddress: loadBalancerStaticIP
             }
           ]
         }
@@ -393,10 +446,10 @@ resource appGateway 'Microsoft.Network/applicationGateways@2021-02-01' = {
         name: 'http-listener'
         properties: {
           frontendIPConfiguration: {
-            id: resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', 'chatbot-appgw', 'appGwPublicFrontendIp')
+            id: resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', naming.appGateway, 'appGwPublicFrontendIp')
           }
           frontendPort: {
-            id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', 'chatbot-appgw', 'port_80')
+            id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', naming.appGateway, 'port_80')
           }
           protocol: 'Http'
         }
@@ -408,13 +461,13 @@ resource appGateway 'Microsoft.Network/applicationGateways@2021-02-01' = {
         properties: {
           ruleType: 'Basic'
           httpListener: {
-            id: resourceId('Microsoft.Network/applicationGateways/httpListeners', 'chatbot-appgw', 'http-listener')
+            id: resourceId('Microsoft.Network/applicationGateways/httpListeners', naming.appGateway, 'http-listener')
           }
           backendAddressPool: {
-            id: resourceId('Microsoft.Network/applicationGateways/backendAddressPools', 'chatbot-appgw', 'backend-pool')
+            id: resourceId('Microsoft.Network/applicationGateways/backendAddressPools', naming.appGateway, 'backend-pool')
           }
           backendHttpSettings: {
-            id: resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', 'chatbot-appgw', 'http-settings')
+            id: resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', naming.appGateway, 'http-settings')
           }
         }
       }
