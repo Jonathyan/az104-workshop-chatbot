@@ -1,6 +1,6 @@
 param adminUsername string
 param adminSshPublicKey string
-param principalIdForKVAccess string = az ad signed-in-user show --query id -o tsv
+param principalIdForKVAccess string
 
 var location = resourceGroup().location
 

@@ -30,6 +30,7 @@ De infrastructuur is opgesplitst in drie functionele Bicep modules en een hoofd-
 .
 ├── main.bicep
 ├── deploy.sh
+├── post-deploy.sh     # Automatiseert post-deployment stappen
 └── modules/
     ├── foundation.bicep   # Netwerk, logging, en backup
     ├── backend.bicep      # PaaS-diensten (Key Vault, OpenAI)
@@ -51,22 +52,24 @@ De infrastructuur is opgesplitst in drie functionele Bicep modules en een hoofd-
 
 **Resources:**
 
-1.  **Log Analytics Workspace**: Voor het centraliseren van alle logs en metrics.
-2.  **Virtual Network (VNet)**:
+1.  **Log Analytics Workspace**: Voor het centraliseren van alle logs en metrics (gebruikt `Microsoft.OperationalInsights/workspaces@2021-06-01`).
+2.  **Network Security Group (NSG)** voor `snet-vmss`:
+      * **Inbound Regel 1**: Sta verkeer toe van de `AzureLoadBalancer` tag op poort `8080`.
+      * **Inbound Regel 2**: Sta SSH-verkeer (poort `22`) toe vanaf de `AzureBastionSubnet` (10.0.3.0/24).
+3.  **Virtual Network (VNet)**:
       * Gebruik de `vnetAddressPrefix` parameter.
-3.  **Subnetten** binnen het VNet:
+      * NSG wordt gekoppeld aan het `snet-vmss` subnet.
+4.  **Subnetten** binnen het VNet:
       * `snet-appgateway` (Adres: `10.0.0.0/24`)
-      * `snet-vmss` (Adres: `10.0.1.0/24`)
+      * `snet-vmss` (Adres: `10.0.1.0/24`) - Met NSG gekoppeld
       * `snet-endpoints` (Adres: `10.0.2.0/24`)
       * `AzureBastionSubnet` (Adres: `10.0.3.0/24`) - Voor beheer.
-4.  **Network Security Group (NSG)** voor `snet-vmss`:
-      * **Inbound Regel 1**: Sta verkeer toe van de `AzureLoadBalancer` tag op poort `8080`.
-      * **Inbound Regel 2**: Sta SSH-verkeer (poort `22`) toe vanaf de `AzureBastionSubnet`.
 5.  **Private DNS Zones**:
       * Zone 1: `privatelink.openai.azure.com`
       * Zone 2: `privatelink.vaultcore.azure.net`
-      * Koppel beide zones aan het VNet voor automatische DNS-registratie van de private endpoints.
-6.  **Azure Bastion**: Geconfigureerd voor het VNet en geplaatst in `AzureBastionSubnet`. Vereist een Public IP.
+      * **Virtual Network Links**: Koppel beide zones aan het VNet voor automatische DNS-registratie van de private endpoints.
+6.  **Public IP voor Bastion**: Standard SKU met statische allocatie.
+7.  **Azure Bastion**: Geconfigureerd voor het VNet en geplaatst in `AzureBastionSubnet`.
 
 **Outputs:**
 
@@ -93,14 +96,17 @@ De infrastructuur is opgesplitst in drie functionele Bicep modules en een hoofd-
 1.  **Azure Key Vault**:
       * Schakel `publicNetworkAccess` uit.
       * Schakel `enableRbacAuthorization` in.
+      * Geen access policies - gebruikt RBAC voor toegangsbeheer.
 2.  **Private Endpoint voor Key Vault**:
       * Plaats in het `endpointsSubnetId`.
-      * Koppel aan de `privatelink.vaultcore.azure.net` DNS-zone.
+      * **Private DNS Zone Group**: Automatische koppeling aan de `privatelink.vaultcore.azure.net` DNS-zone.
 3.  **Azure OpenAI Service**:
+      * SKU: S0
       * Schakel `publicNetworkAccess` uit.
 4.  **Private Endpoint voor OpenAI**:
       * Plaats in het `endpointsSubnetId`.
-      * Koppel aan de `privatelink.openai.azure.com` DNS-zone.
+      * **Private DNS Zone Group**: Automatische koppeling aan de `privatelink.openai.azure.com` DNS-zone.
+      * Gebruikt `account` als groupId voor de private link service connection.
 
 **Outputs:**
 
@@ -123,29 +129,31 @@ De infrastructuur is opgesplitst in drie functionele Bicep modules en een hoofd-
 
 **Resources:**
 
-1.  **Public IP Address** (Standard SKU) voor de Application Gateway.
-2.  **Internal Load Balancer** (Standard SKU):
-      * **Frontend IP Configuration**: Een privaat IP-adres in `snet-vmss`.
-      * **Backend Address Pool**: Leeg, wordt gevuld door de VMSS.
-      * **Health Probe**: TCP-probe op poort `8080`.
+1.  **Public IP Address** (Standard SKU, Regional tier) voor de Application Gateway met statische allocatie.
+2.  **Internal Load Balancer** (Standard SKU, Regional tier):
+      * **Frontend IP Configuration**: Dynamisch privaat IP-adres in `snet-vmss`.
+      * **Backend Address Pool**: Wordt automatisch gevuld door de VMSS.
+      * **Health Probe**: TCP-probe op poort `8080` (15s interval, 2 probes).
       * **Load Balancing Rule**: Verdeel verkeer van de frontend naar de backend pool op poort `8080`.
 3.  **Virtual Machine Scale Set (VMSS)**:
       * **SKU**: `Standard_B2s`
-      * **Image**: Ubuntu Server 22.04 LTS.
+      * **Image**: Ubuntu Server 22.04 LTS (`0001-com-ubuntu-server-jammy`, `22_04-lts-gen2`).
       * **Instance Count**: Start met 2 instances.
       * **Availability Zones**: Spreid de instances over zones 1, 2 en 3.
       * **Networking**: Koppel aan `vmssSubnetId` en de backend pool van de Internal Load Balancer.
       * **Identity**: Schakel een **System-Assigned Managed Identity** in.
-      * **Autoscaling**:
-          * Schaal uit naar max. 5 instances als CPU \> 75% voor 5 minuten.
-          * Schaal in naar min. 2 instances als CPU \< 25% voor 10 minuten.
-      * **VM Extension (`CustomScript`)**: Gebruik een script dat de Streamlit-app installeert en een service configureert. Zie de `chatbot.service` configuratie in het originele document.
-4.  **Key Vault Access Policy**: Wijs 'Get' en 'List' permissies voor secrets toe aan de **Managed Identity** van de VMSS.
-5.  **Application Gateway** (Standard\_v2 / WAF\_v2 SKU):
-      * **WAF**: Schakel de WAF in met de OWASP 3.2 ruleset en zet deze in 'Prevention' mode.
+      * **Authentication**: SSH-only (geen wachtwoord), gebruikt de `adminSshPublicKey` parameter.
+      * **VM Extension (`CustomScript`)**: Inline script dat Python, Streamlit en de chatbot-app installeert en configureert als systemd service.
+4.  **Autoscaling Settings** (aparte resource):
+      * Schaal uit naar max. 5 instances als CPU > 75% voor 5 minuten.
+      * Schaal in naar min. 2 instances als CPU < 25% voor 10 minuten.
+5.  **RBAC Role Assignment**: Wijs de **Key Vault Secrets User** rol toe aan de **Managed Identity** van de VMSS.
+6.  **Application Gateway** (WAF_v2 SKU):
+      * **WAF**: Ingeschakeld met OWASP 3.2 ruleset in 'Prevention' mode.
       * **Frontend IP**: Koppel de Public IP.
       * **HTTP Listener**: Luister op poort 80.
-      * **Backend Pool**: Verwijs naar de frontend IP-configuratie van de Internal Load Balancer.
+      * **Backend Pool**: Verwijst naar het private IP-adres van de Internal Load Balancer.
+      * **Backend HTTP Settings**: Poort 8080, HTTP protocol, 20s timeout.
       * **Routing Rule**: Koppel de listener aan de backend pool.
 
 **Outputs:**
@@ -158,9 +166,9 @@ De infrastructuur is opgesplitst in drie functionele Bicep modules en een hoofd-
 
 **Parameters:**
 
-  * `adminUsername`: `string`
-  * `adminSshPublicKey`: `string`
-  * `principalIdForKVAccess`: `string` (met `az ad signed-in-user show --query id -o tsv` als default waarde).
+  * `adminUsername`: `string` - Gebruikersnaam voor de VM's in de VMSS.
+  * `adminSshPublicKey`: `string` - De publieke SSH-sleutel voor authenticatie.
+  * `principalIdForKVAccess`: `string` - Object ID van de gebruiker voor Key Vault toegang (geen default waarde).
 
 **Logica:**
 
@@ -180,20 +188,60 @@ De infrastructuur is opgesplitst in drie functionele Bicep modules en een hoofd-
 
 ### 5\. `deploy.sh`
 
-**Doel:** Vereenvoudig het deployment proces.
+**Doel:** Vereenvoudig het deployment proces met error handling.
 
 **Script logica:**
 
-1.  Vraag om een `RESOURCE_GROUP` naam.
-2.  Lees de SSH public key (`~/.ssh/id_rsa.pub`) in een variabele.
-3.  Haal de object-ID van de ingelogde gebruiker op (`az ad signed-in-user show...`).
-4.  Voer het `az deployment group create` commando uit op `main.bicep` en geef de variabelen als parameters mee.
+1.  **Error handling**: Script stopt bij fouten (`set -e`).
+2.  Vraag om een `RESOURCE_GROUP` naam.
+3.  Vraag om een `ADMIN_USERNAME` (default: `azureuser`).
+4.  **SSH Key validatie**: Controleer of `~/.ssh/id_rsa.pub` bestaat, anders toon instructies.
+5.  **User Principal ID**: Haal de object-ID van de ingelogde gebruiker op met error handling.
+6.  **Deployment**: Voer het `az deployment group create` commando uit met alle parameters.
+
+### 6\. `post-deploy.sh`
+
+**Doel:** Automatiseer de post-deployment configuratie.
+
+**Script logica:**
+
+1.  Vraag om de `RESOURCE_GROUP` naam.
+2.  **Resource Discovery**: Vind automatisch de Key Vault en OpenAI service namen.
+3.  **OpenAI API Key**: Haal de API-sleutel op en voeg toe aan Key Vault als `OpenAI-API-Key`.
+4.  **Model Deployment**: Implementeer automatisch het GPT-4 model in de OpenAI service.
+5.  **URL Output**: Toon de chatbot toegangs-URL.
 
 -----
 
-## Post-deployment stappen
+## Deployment Instructies
 
-Na de Bicep deployment zijn er nog twee handmatige stappen nodig:
+### Stap 1: Voorbereiding
 
-1.  **Voeg OpenAI API-Key toe aan Key Vault**: Haal de API-sleutel van de OpenAI-service op en voeg deze als een secret (`OpenAI-API-Key`) toe aan de Key Vault.
-2.  **Implementeer een Model in OpenAI**: Implementeer een model zoals 'gpt-4' in de Azure OpenAI-service. Zonder een geïmplementeerd model zal de chatbot niet werken.
+1. **Azure CLI**: Zorg dat je bent ingelogd: `az login`
+2. **SSH Key**: Genereer een SSH key pair als je die nog niet hebt: `ssh-keygen -t rsa -b 4096`
+3. **Resource Group**: Maak een resource group aan: `az group create --name <naam> --location westeurope`
+
+### Stap 2: Deployment
+
+1. **Hoofddeployment**: Voer `./deploy.sh` uit en volg de prompts
+2. **Post-configuratie**: Voer `./post-deploy.sh` uit om de OpenAI configuratie te voltooien
+
+### Stap 3: Verificatie
+
+Na succesvolle deployment krijg je een URL waar de chatbot beschikbaar is. Het kan enkele minuten duren voordat de applicatie volledig operationeel is.
+
+## Chatbot Applicatie Details
+
+De geïmplementeerde chatbot is een **Streamlit-applicatie** die:
+
+- **Azure Key Vault** gebruikt voor veilige opslag van de OpenAI API-sleutel
+- **Managed Identity** gebruikt voor authenticatie met Azure services
+- **OpenAI GPT-4** model gebruikt voor chat-functionaliteit
+- Draait als **systemd service** op poort 8080
+- **Session state** behoudt voor gesprekgeschiedenis
+
+## Troubleshooting
+
+- **Applicatie niet beschikbaar**: Controleer of de VMSS instances draaien en de custom script extension is voltooid
+- **Authentication errors**: Zorg dat de Managed Identity de juiste RBAC-rechten heeft op de Key Vault
+- **OpenAI errors**: Controleer of het GPT-4 model is geïmplementeerd en de API-sleutel correct is opgeslagen

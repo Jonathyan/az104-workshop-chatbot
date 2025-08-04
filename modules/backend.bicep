@@ -13,18 +13,6 @@ resource keyVault 'Microsoft.KeyVault/vaults@2021-04-01' = {
       name: 'standard'
     }
     tenantId: subscription().tenantId
-    accessPolicies: [
-      {
-        tenantId: subscription().tenantId
-        objectId: principalIdForKVAccess
-        permissions: {
-          secrets: [
-            'get'
-            'list'
-          ]
-        }
-      }
-    ]
     publicNetworkAccess: 'Disabled'
     enableRbacAuthorization: true
   }
@@ -32,7 +20,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2021-04-01' = {
 
 // Private Endpoint for Key Vault
 resource keyVaultPrivateEndpoint 'Microsoft.Network/privateEndpoints@2021-02-01' = {
-  name: '${keyVault.name}-privateEndpoint'
+  name: '${keyVault.name}-pe'
   location: location
   properties: {
     subnet: {
@@ -46,6 +34,21 @@ resource keyVaultPrivateEndpoint 'Microsoft.Network/privateEndpoints@2021-02-01'
           groupIds: [
             'vault'
           ]
+        }
+      }
+    ]
+  }
+}
+
+resource keyVaultDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2021-02-01' = {
+  parent: keyVaultPrivateEndpoint
+  name: 'default'
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: 'privatelink-vaultcore-azure-net'
+        properties: {
+          privateDnsZoneId: resourceId('Microsoft.Network/privateDnsZones', 'privatelink.vaultcore.azure.net')
         }
       }
     ]
@@ -68,7 +71,7 @@ resource openAIService 'Microsoft.CognitiveServices/accounts@2021-04-30' = {
 
 // Private Endpoint for OpenAI
 resource openAIPrivateEndpoint 'Microsoft.Network/privateEndpoints@2021-02-01' = {
-  name: '${openAIService.name}-privateEndpoint'
+  name: '${openAIService.name}-pe'
   location: location
   properties: {
     subnet: {
@@ -80,8 +83,23 @@ resource openAIPrivateEndpoint 'Microsoft.Network/privateEndpoints@2021-02-01' =
         properties: {
           privateLinkServiceId: openAIService.id
           groupIds: [
-            'openai'
+            'account'
           ]
+        }
+      }
+    ]
+  }
+}
+
+resource openAIDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2021-02-01' = {
+  parent: openAIPrivateEndpoint
+  name: 'default'
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: 'privatelink-openai-azure-com'
+        properties: {
+          privateDnsZoneId: resourceId('Microsoft.Network/privateDnsZones', 'privatelink.openai.azure.com')
         }
       }
     ]
