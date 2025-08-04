@@ -2,6 +2,8 @@
 
 Ter voorbereiding van het AZ-104 examen bouwen we een chatbot waarbij je in een geisoleerde omgeving vragen kunt stellen aan je 'eigen' ChatGPT. Dit document beschrijft de technische vereisten om dit te bouwen met een veilige, schaalbare en robuuste Azure chatbot-infrastructuur met behulp van Bicep. Volg de onderstaande specificaties nauwkeurig om de modulaire Bicep-bestanden te genereren.
 
+Voor een goede leerervaring, is het aanbevolen om de modules 1 voor 1 uit te rollen en te snappen wat elk component in een module precies doet. Gebruik bijv. je eigen persoonlijke ChatGPT of vergelijkbaars die je zelf al hebt om te bevragen wat een service is en waarom je het zou gebruiken.
+
 ## Architectuur doelstelling
 
 Het doel is om een bestaande single-VM chatbot-oplossing te transformeren naar een enterprise-architectuur. De belangrijkste verbeteringen zijn:
