@@ -1,8 +1,8 @@
-# Instructie-Blueprint voor het Bouwen van een Enterprise Chatbot met Bicep
+# Enterprise chatbot bouwen met Bicep
 
-Dit document beschrijft de technische vereisten voor het bouwen van een veilige, schaalbare en robuuste Azure chatbot-infrastructuur met behulp van Bicep. Volg de onderstaande specificaties nauwkeurig om de modulaire Bicep-bestanden te genereren.
+Ter voorbereiding van het AZ-104 examen bouwen we een chatbot waarbij je in een geisoleerde omgeving vragen kunt stellen aan je 'eigen' ChatGPT. Dit document beschrijft de technische vereisten om dit te bouwen met een veilige, schaalbare en robuuste Azure chatbot-infrastructuur met behulp van Bicep. Volg de onderstaande specificaties nauwkeurig om de modulaire Bicep-bestanden te genereren.
 
-## Architectuur Doelstelling
+## Architectuur doelstelling
 
 Het doel is om een bestaande single-VM chatbot-oplossing te transformeren naar een enterprise-architectuur. De belangrijkste verbeteringen zijn:
 
@@ -11,7 +11,7 @@ Het doel is om een bestaande single-VM chatbot-oplossing te transformeren naar e
   * **Gecentraliseerde Monitoring en Logging** met Azure Monitor en een Log Analytics Workspace.
   * **Geautomatiseerd Beheer** door de infrastructuur volledig als code te definiëren in modulaire Bicep-bestanden.
 
-## Bicep Modulaire Structuur
+## Bicep modulaire structuur
 
 De infrastructuur wordt opgesplitst in drie functionele modules en een hoofd-deploymentbestand.
 
@@ -180,7 +180,7 @@ De infrastructuur wordt opgesplitst in drie functionele modules en een hoofd-dep
 
 -----
 
-## Post-Deployment Stappen
+## Post-deployment stappen
 
 Na de Bicep deployment zijn er nog twee handmatige stappen nodig:
 
